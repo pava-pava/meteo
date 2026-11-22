@@ -1,0 +1,5 @@
+#!/bin/sh
+root="$(dirname "$0")/../.."
+settings="$root/settings.json"
+spool="$(jsonfilter -i "$settings" -e '@.spool')" || exit 1
+exec flock -x "$spool/queue.lock" /usr/bin/ucode "$root/relay.uc" ingest "$settings"

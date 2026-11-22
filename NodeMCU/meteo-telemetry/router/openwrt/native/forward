@@ -1,0 +1,40 @@
+#!/bin/sh
+set -eu
+umask 077
+root="$(dirname "$0")"
+settings="$root/settings.json"
+spool="$(jsonfilter -i "$settings" -e '@.spool')"
+endpoint="$(jsonfilter -i "$settings" -e '@.endpoint')"
+token_file="$(jsonfilter -i "$settings" -e '@.tokenFile')"
+token="$(cat "$token_file")"
+case "$token" in *[[:space:]]*) exit 1;; esac
+[ "${#token}" -ge 16 ] || exit 1
+work="$(mktemp -d "$spool/.delivery.XXXXXX")"
+trap 'rm -f "$work/headers" "$work/batch.json" "$work/last.json"; rmdir "$work"' EXIT
+trap 'exit 0' TERM INT
+printf 'Authorization: Bearer %s\nContent-Type: application/json\n' "$token" > "$work/headers"
+unset token
+
+cursor="$spool/cursor.json"
+offline=0
+while :; do
+    # Skip starting ucode while there is no pending work.
+    state=
+    if [ -r "$cursor" ]; then read -r state < "$cursor" || :; fi
+    case "$state" in
+        ''|*'"Count":0}'*) sleep 1; continue;;
+    esac
+    count="$(flock -x "$spool/queue.lock" /usr/bin/ucode "$root/relay.uc" batch "$settings" "$work")" || { sleep 10; continue; }
+    if [ "$count" = 0 ]; then sleep 1; continue; fi
+    if code="$(curl -q --noproxy '*' --connect-timeout 2 --max-time 4 -fsS -o /dev/null \
+        -w '%{http_code}' -H "@$work/headers" --data-binary "@$work/batch.json" "$endpoint" 2>/dev/null)" &&
+        [ "$code" = 204 ] &&
+        flock -x "$spool/queue.lock" /usr/bin/ucode "$root/relay.uc" ack "$settings" "$work"; then
+        [ "$offline" = 0 ] || echo 'Telemetry delivery resumed'
+        offline=0
+    else
+        [ "$offline" = 1 ] || echo 'Telemetry delivery paused'
+        offline=1
+        sleep 10
+    fi
+done
