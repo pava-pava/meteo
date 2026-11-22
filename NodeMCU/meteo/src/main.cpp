@@ -9,8 +9,10 @@
 #include "telemetry/telemetry.h"
 
 void setup() {
+#if METEO_ENABLE_SERIAL_LOG
   Serial.begin(9600);
   Serial.println("Start Serial Monitor");
+#endif
 
 #if METEO_ENABLE_DISPLAY
   // SPI назначает D6 входом MISO. Поэтому программный UART на D6 запускаем после дисплея.
@@ -46,7 +48,9 @@ void loop() {
 #elif METEO_ENABLE_WIFI
   const float dsTemperature = NAN;
 #endif
+#if METEO_ENABLE_SERIAL_LOG
   Serial.println();
+#endif
 
 #if METEO_ENABLE_DISPLAY
   float temperature = weather.temperature;

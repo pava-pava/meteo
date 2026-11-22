@@ -60,8 +60,10 @@ bool startSensor() {
     result = bme280_set_sensor_mode(BME280_POWERMODE_NORMAL, &sensor);
   }
   if (result != BME280_OK) {
+#if METEO_ENABLE_SERIAL_LOG
     Serial.print(F("BME280 init error: "));
     Serial.println(static_cast<int>(result));
+#endif
     return false;
   }
 
@@ -98,12 +100,14 @@ Reading read() {
     result = bme280_get_sensor_data(BME280_ALL, &data, &sensor);
   }
   if (result != BME280_OK || mode != BME280_POWERMODE_NORMAL) {
+#if METEO_ENABLE_SERIAL_LOG
     if (result != BME280_OK) {
       Serial.print(F("BME280 read error: "));
       Serial.println(static_cast<int>(result));
     } else {
       Serial.println(F("BME280 left normal mode"));
     }
+#endif
     // После сбоя следующее успешное подключение заново загрузит настройки и калибровку.
     ready = false;
     lastAttempt = millis();
@@ -115,12 +119,14 @@ Reading read() {
       static_cast<float>(data.pressure * pascalToMmHg),
       static_cast<float>(data.humidity),
   };
+#if METEO_ENABLE_SERIAL_LOG
   Serial.print(F("BME280 temperature (C): "));
   Serial.println(reading.temperature);
   Serial.print(F("BME280 pressure (mmHg): "));
   Serial.println(reading.pressureMmHg);
   Serial.print(F("BME280 humidity (%): "));
   Serial.println(reading.humidity);
+#endif
   return reading;
 }
 

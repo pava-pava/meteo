@@ -118,9 +118,11 @@ void publish(const Reading& reading) {
   const int status = sendSample();
   if (status == HTTP_CODE_NO_CONTENT) {
     pending = false;
+#if METEO_ENABLE_SERIAL_LOG
   } else {
     Serial.print(F("Telemetry POST: "));
     Serial.println(status);
+#endif
   }
 }
 

@@ -27,13 +27,17 @@ float readTemperature() {
     sensor.requestTemperatures();
     const float temperature = sensor.getTempCByIndex(0);
     if (temperature != DEVICE_DISCONNECTED_C) {
+#if METEO_ENABLE_SERIAL_LOG
       Serial.print(F("DS18B20 temperature (C): "));
       Serial.println(temperature);
+#endif
       return temperature;
     }
   }
 
+#if METEO_ENABLE_SERIAL_LOG
   Serial.println(F("DS18B20 read error"));
+#endif
   return NAN;
 }
 

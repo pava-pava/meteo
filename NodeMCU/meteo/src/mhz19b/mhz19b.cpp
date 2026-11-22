@@ -20,7 +20,9 @@ void begin() {
   co2Serial.begin(9600, SWSERIAL_8N1, D6, D0);  // RX, TX NodeMCU
   startedAt = millis();
   warmedUp = false;
+#if METEO_ENABLE_SERIAL_LOG
   Serial.println(F("MH-Z19B warming up (3 min)"));
+#endif
 }
 
 Reading read() {
@@ -38,15 +40,19 @@ Reading read() {
   const auto error = sensor.errorCode;
   // Проверяем статус сразу после запроса: он относится именно к этому ответу.
   if (error != RESULT_OK || ppm <= 0) {
+#if METEO_ENABLE_SERIAL_LOG
     Serial.print(F("MH-Z19B invalid reading, status: "));
     Serial.print(static_cast<int>(error));
     Serial.print(F(", ppm: "));
     Serial.println(ppm);
+#endif
     return {ppm, false};
   }
 
+#if METEO_ENABLE_SERIAL_LOG
   Serial.print(F("CO2 (ppm): "));
   Serial.println(ppm);
+#endif
   return {ppm, true};
 }
 
