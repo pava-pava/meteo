@@ -40,7 +40,14 @@ function draw(data, selected) {
       .map(([field, label, color]) => ({
         label, data: points(data.rows, field, gapLimit), borderColor: color,
         borderWidth: field === "co2_min" || field === "co2_max" ? 1 : 2,
-        spanGaps: false, pointRadius: data.rows.length <= 120 ? 2 : 0, pointHoverRadius: 3,
+        spanGaps: false,
+        pointRadius: data.rows.length <= 120 ? 2 : ({dataset, dataIndex}) => {
+          const series = dataset.data;
+          const isolated = series[dataIndex]?.y != null &&
+            series[dataIndex - 1]?.y == null && series[dataIndex + 1]?.y == null;
+          return isolated ? 3 : 0;
+        },
+        pointHoverRadius: 3,
       }));
     const scales = {
       x: {
