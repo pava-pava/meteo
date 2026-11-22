@@ -24,10 +24,10 @@ flowchart LR
 
 ![Meteo NodeMCU](./NodeMCU/meteo/meteo_nodemcu.drawio.svg)
 
-Вывод на дисплей производится в таком виде:
+#### Вывод на дисплей производится в таком виде:
 
-![Pinout NodeMCU](./NodeMCU/display.png)
+![Display preview](./NodeMCU/display.png)
 
-PinOut Отладочной платы
+#### PinOut Отладочной платы
 
-![Pinout NodeMCU](./NodeMCU/NodeMCU-Pinout.png)
+![Pinout NodeMCU](./NodeMCU/NodeMCU-PinOut.png)
