@@ -1,0 +1,8 @@
+/bin/
+/.venv/
+/.runtime/
+__pycache__/
+/server/config.json
+/server/data/
+/router/token
+/router/openwrt/meteo.local

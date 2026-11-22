@@ -1,0 +1,5 @@
+config relay 'main'
+    option enabled '0'
+    option listen '192.168.1.1:8781'
+    option server 'http://192.168.1.20:8780'
+    option station 'meteo-1'
