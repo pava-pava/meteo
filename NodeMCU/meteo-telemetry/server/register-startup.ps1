@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)]
     [string]$PythonPath,
     [string]$ConfigPath = (Join-Path $PSScriptRoot 'config.json'),
-    [System.Net.IPAddress]$RouterAddress
+    [System.Net.IPAddress]$RouterAddress,
+    [string]$LogonUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,7 +34,9 @@ if ($RouterAddress -and -not (Get-NetFirewallRule -Name $firewallName -ErrorActi
 
 $arguments = '"{0}" --config "{1}"' -f $entry, $config
 $action = New-ScheduledTaskAction -Execute $python -Argument $arguments -WorkingDirectory $PSScriptRoot
-$trigger = New-ScheduledTaskTrigger -AtStartup
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $LogonUser
+$trigger.Delay = 'PT30S'
+$trigger.Repetition = (New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 2)).Repetition
 $principal = New-ScheduledTaskPrincipal -UserId 'S-1-5-19' -LogonType ServiceAccount
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) `
     -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `

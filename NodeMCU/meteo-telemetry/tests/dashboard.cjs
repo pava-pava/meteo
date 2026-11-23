@@ -16,6 +16,47 @@ async function main() {
       const {min, max} = Chart.getChart("co2").scales.x;
       return max - min === 3_600_000;
     });
+    const beforePan = await page.evaluate(() => {
+      const chart = Chart.getChart("temperature");
+      const {left, top, right, bottom} = chart.chartArea;
+      const rect = chart.canvas.getBoundingClientRect();
+      return {
+        x: rect.left + (left + right) / 2,
+        y: rect.top + (top + bottom) / 2,
+        latest: chart.scales.x.max,
+        yMin: chart.scales.y.min,
+      };
+    });
+    await page.mouse.move(beforePan.x, beforePan.y);
+    const movingHistory = page.waitForResponse(response =>
+      new URL(response.url()).searchParams.has("end_ms") && response.ok());
+    await page.mouse.down();
+    await page.mouse.move(beforePan.x + 100, beforePan.y + 25, {steps: 5});
+    await page.waitForFunction(before => {
+      const temperature = Chart.getChart("temperature").scales;
+      const humidity = Chart.getChart("humidity");
+      return temperature.x.max < before.latest &&
+        humidity.scales.x.max === temperature.x.max &&
+        temperature.y.min > before.yMin && humidity.options.scales.y.min === undefined;
+    }, beforePan);
+    const movingData = await (await movingHistory).json();
+    assert.equal(movingData.rows.length, 0);
+    await page.waitForFunction(() => Chart.getChart("pressure").data.datasets[0].data.length === 0);
+    await page.mouse.up();
+    await page.click("#reset-view");
+    await page.waitForFunction(before => {
+      const {x, y} = Chart.getChart("temperature").scales;
+      return x.max >= before.latest && y.min === before.yMin;
+    }, beforePan);
+    const oneHourBack = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/history" && url.searchParams.has("end_ms");
+    });
+    await page.click("#earlier");
+    const older = await (await oneHourBack).json();
+    await page.waitForFunction(end => Chart.getChart("pressure").scales.x.max === end, older.end_ms);
+    await page.click("#later");
+    await page.waitForFunction(() => document.getElementById("reset-view").disabled);
     await page.selectOption("#period", "1y");
     await page.waitForFunction(() => Chart.getChart("co2").data.datasets.some(
       dataset => dataset.label === "Максимум" && dataset.data.some(point => point.y === 1200)

@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Метеостанция</title>
   <link rel="icon" type="image/png" sizes="48x48" href="/static/favicon.png">
-  <link rel="stylesheet" href="/static/dashboard.css">
+  <link rel="stylesheet" href="/static/dashboard.css?v=pan2">
   <script defer src="/static/vendor/chart.umd.min.js"></script>
-  <script defer src="/static/dashboard.js"></script>
+  <script defer src="/static/dashboard.js?v=pan3"></script>
 </head>
 <body>
 <main>
@@ -16,7 +16,8 @@
       <h1>Метеостанция</h1>
       <p id="status" role="status">Загрузка истории…</p>
     </div>
-    <label for="period">Период
+    <div class="controls">
+      <label for="period">Период
       <select id="period">
         <option value="1h" selected>1 час</option>
         <option value="6h">6 часов</option>
@@ -27,7 +28,11 @@
         <option value="180d">180 дней</option>
         <option value="1y">1 год</option>
       </select>
-    </label>
+      </label>
+      <button id="earlier" type="button" disabled>← Раньше</button>
+      <button id="later" type="button" disabled>Позже →</button>
+      <button id="reset-view" type="button" disabled>К текущим данным</button>
+    </div>
   </header>
   <div class="charts">
     <section><h2>Температура, °C</h2><div class="canvas"><canvas id="temperature" aria-label="Температура" role="img"></canvas></div></section>

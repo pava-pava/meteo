@@ -109,6 +109,11 @@ def main():
             historic = sample | {"seq": 3, "measured_at_ms": historic_at, "co2_ppm": 600}
             peak = historic | {"seq": 4, "measured_at_ms": historic_at + 60_000, "co2_ppm": 1200}
             assert api(ingest_url, [historic, peak])[0] == 204
+            earlier_end = historic_at + 120_000
+            earlier = json.loads(api(server_url + f"/api/history?period=1h&end_ms={earlier_end}")[1])
+            assert earlier["end_ms"] == earlier_end
+            assert earlier["now_ms"] > earlier_end
+            assert [row["co2_ppm"] for row in earlier["rows"]] == [600, 1200]
             periods = {
                 "1h": (1, 0), "6h": (6, 0), "24h": (24, 0), "7d": (168, 15), "30d": (720, 60),
                 "90d": (2160, 180), "180d": (4320, 360), "1y": (8760, 720),

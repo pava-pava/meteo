@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
@@ -101,10 +101,14 @@ def create_app(database: Path, token: str):
         return Response(status_code=204)
 
     @app.get("/api/history")
-    def history(period: Literal["1h", "6h", "24h", "7d", "30d", "90d", "180d", "1y"] = "24h"):
+    def history(
+        period: Literal["1h", "6h", "24h", "7d", "30d", "90d", "180d", "1y"] = "24h",
+        end_ms: Annotated[int | None, Query(ge=31_536_000_000)] = None,
+    ):
         hours, bucket_minutes = PERIODS[period]
         now_ms = int(time.time() * 1000)
-        start_ms = now_ms - hours * 3_600_000
+        end_ms = min(now_ms, end_ms) if end_ms is not None else now_ms
+        start_ms = end_ms - hours * 3_600_000
         bucket_ms = bucket_minutes * 60_000
         with closing(sqlite3.connect(database)) as db:
             db.row_factory = sqlite3.Row
@@ -119,16 +123,16 @@ def create_app(database: Path, token: str):
                     FROM readings
                     WHERE measured_at_ms BETWEEN ? AND ?
                     GROUP BY t ORDER BY t
-                """, (bucket_ms, bucket_ms, start_ms, start_ms, now_ms))
+                """, (bucket_ms, bucket_ms, start_ms, start_ms, end_ms))
             else:
                 rows = db.execute("""
                     SELECT measured_at_ms AS t, temp_bme_c, temp_ds_c,
                            humidity_pct, pressure_mmhg, co2_ppm
                     FROM readings WHERE measured_at_ms BETWEEN ? AND ?
                     ORDER BY measured_at_ms
-                """, (start_ms, now_ms))
+                """, (start_ms, end_ms))
             return {
-                "latest_ms": latest, "start_ms": start_ms, "end_ms": now_ms,
+                "latest_ms": latest, "start_ms": start_ms, "end_ms": end_ms, "now_ms": now_ms,
                 "bucket_ms": bucket_ms, "rows": [dict(row) for row in rows],
             }
 
