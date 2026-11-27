@@ -11,6 +11,15 @@ async function main() {
     await page.waitForFunction(() => document.getElementById("status").textContent.includes("Последнее измерение"));
     assert.equal(await page.locator("canvas").count(), 4);
     assert(await page.evaluate(() => Chart.getChart("co2").data.datasets[0].data.some(point => point.y === 885)));
+    for (const [id, value, span] of [
+      ["temperature", -3.25, 3], ["humidity", 49.15, 5], ["pressure", 753.1, 5], ["co2", 885, 100],
+    ]) {
+      const {min, max} = await page.evaluate(chartId => {
+        const scale = Chart.getChart(chartId).scales.y;
+        return {min: scale.min, max: scale.max};
+      }, id);
+      assert(min <= value - span / 2 && max >= value + span / 2, id + " minimum scale");
+    }
     await page.selectOption("#period", "1h");
     await page.waitForFunction(() => {
       const {min, max} = Chart.getChart("co2").scales.x;
@@ -61,6 +70,10 @@ async function main() {
     await page.waitForFunction(() => Chart.getChart("co2").data.datasets.some(
       dataset => dataset.label === "Максимум" && dataset.data.some(point => point.y === 1200)
     ));
+    assert(await page.evaluate(() => {
+      const {min, max} = Chart.getChart("co2").scales.y;
+      return min <= 600 && max >= 1200;
+    }), "keep the full CO2 range when historical values span more than 100 ppm");
     const bucket = 900_000;
     const start = Date.UTC(2026, 0, 1);
     const rows = Array.from({length: 121}, (_, i) => ({

@@ -1,4 +1,4 @@
-#include "../config.h"
+#include <config.h>
 
 #if METEO_ENABLE_DS18B20
 #include "ds18b20.h"
@@ -6,11 +6,11 @@
 #include <Arduino.h>
 #include <DallasTemperature.h>
 #include <OneWire.h>
-#include <cmath>
+#include <math.h>
 
 namespace ds18b20 {
 namespace {
-OneWire bus(D2);
+OneWire bus(METEO_DS18B20_DATA_PIN);
 DallasTemperature sensor(&bus);
 }  // namespace
 

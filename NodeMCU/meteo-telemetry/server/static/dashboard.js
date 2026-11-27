@@ -11,6 +11,12 @@ const groups = {
   pressure: [["pressure_mmhg", "Давление", "#c9aeff"]],
   co2: [["co2_ppm", "CO₂", "#ffc878"], ["co2_min", "Минимум", "#a3b9d0"], ["co2_max", "Максимум", "#e8a389"]],
 };
+const scaleLimits = {
+  temperature: {span: 3, lower: -Infinity},
+  humidity: {span: 5, upper: 100},
+  pressure: {span: 5},
+  co2: {span: 100},
+};
 const fullDate = new Intl.DateTimeFormat("ru-RU", {dateStyle: "short", timeStyle: "medium"});
 const clock = new Intl.DateTimeFormat("ru-RU", {hour: "2-digit", minute: "2-digit"});
 const day = new Intl.DateTimeFormat("ru-RU", {day: "numeric", month: "short"});
@@ -37,6 +43,24 @@ function points(rows, field, gapLimit) {
     result.push({x: row.t, y: row[field] ?? null});
   }
   return result;
+}
+
+function minimumScale(datasets, {span, lower = 0, upper = Infinity}) {
+  let lowest = Infinity;
+  let highest = -Infinity;
+  for (const {data} of datasets) {
+    for (const {y} of data) {
+      if (!Number.isFinite(y)) continue;
+      lowest = Math.min(lowest, y);
+      highest = Math.max(highest, y);
+    }
+  }
+  if (lowest === Infinity) return {suggestedMin: 0, suggestedMax: span};
+  if (highest - lowest >= span) return {};
+
+  const center = (lowest + highest) / 2;
+  const suggestedMin = Math.min(upper - span, Math.max(lower, center - span / 2));
+  return {suggestedMin, suggestedMax: suggestedMin + span};
 }
 
 function draw(data, selected, preview) {
@@ -69,7 +93,11 @@ function draw(data, selected, preview) {
         ticks: {maxTicksLimit: 7, color: "#bdcdd7", callback: value => tickFormat.format(value)},
         grid: {color: "#2d414d"},
       },
-      y: {...(preview?.id === id ? preview.y : yRanges.get(id)), ticks: {color: "#bdcdd7"}, grid: {color: "#2d414d"}},
+      y: {
+        ...minimumScale(datasets, scaleLimits[id]),
+        ...(preview?.id === id ? preview.y : yRanges.get(id)),
+        ticks: {color: "#bdcdd7"}, grid: {color: "#2d414d"},
+      },
     };
     const old = charts.get(id);
     if (old) {

@@ -1,29 +1,30 @@
-#include "../config.h"
+#include <config.h>
 
 #if METEO_ENABLE_DISPLAY
 #include "display.h"
 
 #include <Arduino.h>
-#include <cmath>
-#include <cstdio>
-#include <cstring>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 // TFT display libs
 #include <Adafruit_GFX.h>       // include Adafruit graphics library
 #include <Adafruit_ILI9341.h>   // include Adafruit ILI9341 TFT library
 #include "display_fonts.h"
+#if defined(ARDUINO_ARCH_AVR)
+#include "display_fonts_nano.h"
+#endif
 
 namespace {
-// Display pins
-#define TFT_CS  D8
-#define TFT_DC  D1
-#define TFT_RST -1
-
-// Display
-// initialize ILI9341 TFT library with hardware SPI module
-// SCK (CLK) ---> NodeMCU pin D5 (GPIO14)
-// MOSI(DIN) ---> NodeMCU pin D7 (GPIO13)
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RST);
+#if METEO_TFT_HARDWARE_SPI
+static_assert(METEO_TFT_SCK_PIN == SCK && METEO_TFT_MOSI_PIN == MOSI,
+              "Use the board SPI pins or set METEO_TFT_HARDWARE_SPI to 0");
+Adafruit_ILI9341 tft(METEO_TFT_CS_PIN, METEO_TFT_DC_PIN, METEO_TFT_RST_PIN);
+#else
+Adafruit_ILI9341 tft(METEO_TFT_CS_PIN, METEO_TFT_DC_PIN, METEO_TFT_MOSI_PIN,
+                    METEO_TFT_SCK_PIN, METEO_TFT_RST_PIN);
+#endif
 
 constexpr uint16_t backgroundColor = 0x10E4;
 constexpr uint16_t labelColor = 0xA5D9;
@@ -35,6 +36,7 @@ constexpr int16_t columnGap = 7;
 constexpr int16_t co2UnitWidth = 36;
 constexpr int16_t co2UnitGap = 6;
 constexpr int16_t co2FieldHeight = 70;
+#if METEO_TFT_BUFFERED
 constexpr int16_t maxScreenWidth = ILI9341_TFTWIDTH > ILI9341_TFTHEIGHT
                                       ? ILI9341_TFTWIDTH : ILI9341_TFTHEIGHT;
 constexpr int16_t canvasWidth = maxScreenWidth - 2 * margin - co2UnitWidth - co2UnitGap;
@@ -42,6 +44,22 @@ constexpr int16_t canvasWidth = maxScreenWidth - 2 * margin - co2UnitWidth - co2
 // Все поля используют один монохромный буфер размером с самое большое поле.
 GFXcanvas1 valueCanvas(canvasWidth, co2FieldHeight);
 uint16_t valueRow[canvasWidth];
+#endif
+
+struct ValueStyle {
+  const GFXfont* font;
+  uint8_t scale;
+};
+
+#if defined(ARDUINO_ARCH_AVR)
+constexpr ValueStyle co2Style{&nanoDigits, 6};
+constexpr ValueStyle valueStyle{&nanoDigits, 3};
+constexpr ValueStyle compactStyle{&nanoDigits, 2};
+#else
+constexpr ValueStyle co2Style{&interLarge, 1};
+constexpr ValueStyle valueStyle{&interMedium, 1};
+constexpr ValueStyle compactStyle{&interSmall, 1};
+#endif
 
 struct DisplayField {
   int16_t x;
@@ -49,8 +67,8 @@ struct DisplayField {
   int16_t width;
   int16_t height;
   int16_t baseline;
-  const GFXfont* font;
-  const GFXfont* compactFont;
+  ValueStyle style;
+  ValueStyle compactStyle;
   char previous[16];
 };
 
@@ -79,18 +97,20 @@ void drawDisplayLayout() {
   const int16_t co2UnitX = tft.width() - margin - co2UnitWidth;
   const int16_t co2Width = co2UnitX - margin - co2UnitGap;
 
-  co2Field = {margin, co2Y, co2Width, co2FieldHeight, co2Baseline, &interLarge, &interMedium, {}};
+  co2Field = {margin, co2Y, co2Width, co2FieldHeight, co2Baseline, co2Style, valueStyle, {}};
   temperatureField = {margin, valuesY, columnWidth, 32, valuesBaseline,
-                      &interMedium, &interSmall, {}};
+                      valueStyle, compactStyle, {}};
   humidityField = {humidityX, valuesY, columnWidth, 32, valuesBaseline,
-                   &interMedium, &interSmall, {}};
+                   valueStyle, compactStyle, {}};
   pressureField = {pressureX, valuesY, columnWidth, 32, valuesBaseline,
-                   &interMedium, &interSmall, {}};
+                   valueStyle, compactStyle, {}};
 
   tft.fillScreen(backgroundColor);
   tft.setTextSize(1);
   tft.setTextWrap(false);
+#if METEO_TFT_BUFFERED
   valueCanvas.setTextWrap(false);
+#endif
 
   drawCaption(margin, co2Y - 22, captionCo2);
   drawCaption(co2UnitX, co2Baseline - 9, captionPpm);
@@ -105,6 +125,7 @@ void drawDisplayLayout() {
   drawCaption(pressureX, unitsY, captionMillimeters);
 }
 
+#if METEO_TFT_BUFFERED
 void writeValueField(const DisplayField& field, uint16_t color) {
   constexpr int16_t canvasStride = (canvasWidth + 7) / 8;
   const uint8_t* row = valueCanvas.getBuffer();
@@ -122,76 +143,94 @@ void writeValueField(const DisplayField& field, uint16_t color) {
   tft.endWrite();
 }
 
+#endif
+
 void drawDisplayValue(DisplayField& field, const char* text, uint16_t color) {
-  if (std::strcmp(field.previous, text) == 0) {
+  if (strcmp(field.previous, text) == 0) {
     return;
   }
 
-  const bool buffered = valueCanvas.getBuffer() != nullptr;
-  Adafruit_GFX& drawing = buffered ? static_cast<Adafruit_GFX&>(valueCanvas) : tft;
+  Adafruit_GFX* drawing = &tft;
+#if METEO_TFT_BUFFERED
+  if (valueCanvas.getBuffer()) {
+    drawing = &valueCanvas;
+  }
+#endif
   int16_t left, top;
   uint16_t width, height;
-  drawing.setFont(field.font);
-  drawing.getTextBounds(text, 0, 0, &left, &top, &width, &height);
+  drawing->setFont(field.style.font);
+  drawing->setTextSize(field.style.scale);
+  drawing->getTextBounds(text, 0, 0, &left, &top, &width, &height);
   // Если число не помещается, пробуем компактный шрифт и только потом подставляем прочерк.
-  if (width > field.width) {
-    drawing.setFont(field.compactFont);
-    drawing.getTextBounds(text, 0, 0, &left, &top, &width, &height);
+  if (width > static_cast<uint16_t>(field.width)) {
+    drawing->setFont(field.compactStyle.font);
+    drawing->setTextSize(field.compactStyle.scale);
+    drawing->getTextBounds(text, 0, 0, &left, &top, &width, &height);
   }
-  if (width == 0 || width > field.width) {
+  if (width == 0 || width > static_cast<uint16_t>(field.width)) {
     text = "--";
-    drawing.getTextBounds(text, 0, 0, &left, &top, &width, &height);
+    drawing->getTextBounds(text, 0, 0, &left, &top, &width, &height);
   }
-  if (std::strcmp(field.previous, text) == 0) {
+  if (strcmp(field.previous, text) == 0) {
     return;
   }
 
   // Готовим поле целиком в памяти. На экране не появляется пустой кадр между очисткой и текстом.
-  if (buffered) {
+#if METEO_TFT_BUFFERED
+  if (drawing == &valueCanvas) {
     valueCanvas.fillScreen(0);
     valueCanvas.setTextColor(1);
     valueCanvas.setCursor(-left, field.baseline - field.y);
     valueCanvas.print(text);
     writeValueField(field, color);
-  } else {
-    // Если буфер не выделился, рисуем напрямую, очищая только текущее поле.
+  } else
+#endif
+  {
+    // На AVR очищаем и перерисовываем только поле, которое изменилось.
     tft.fillRect(field.x, field.y, field.width, field.height, backgroundColor);
     tft.setTextColor(color);
     tft.setCursor(field.x - left, field.baseline);
     tft.print(text);
   }
   // Сохраняем показанный текст. Следующий такой же результат не потребует записи по SPI.
-  std::snprintf(field.previous, sizeof(field.previous), "%s", text);
+  strcpy(field.previous, text);
 }
 
 void formatDisplayValue(char (&text)[16], float value, int decimals) {
   // NaN от BME280 превращаем в прочерк, дробные числа выводим с десятичной запятой.
-  if (std::isfinite(value)) {
-    const int length = std::snprintf(text, sizeof(text), "%.*f", decimals, value);
+  if (isfinite(value) && fabs(value) < 1000000) {
+#if defined(ARDUINO_ARCH_AVR)
+    // Обычный snprintf в AVR Libc не форматирует числа с плавающей точкой.
+    dtostrf(value, 0, decimals, text);
+    const size_t length = strlen(text);
+#else
+    const int length = snprintf(text, sizeof(text), "%.*f", decimals, value);
+#endif
     if (length > 0 && length < static_cast<int>(sizeof(text))) {
-      if (char* decimalPoint = std::strchr(text, '.')) {
+      if (char* decimalPoint = strchr(text, '.')) {
         *decimalPoint = ',';
       }
       return;
     }
   }
-  std::strcpy(text, "--");
+  strcpy(text, "--");
 }
 }  // namespace
 
 void initDisplay() {
   tft.begin();
-  // tft.setRotation(2);
+  tft.setRotation(METEO_TFT_ROTATION);
   drawDisplayLayout();
-
-  // uint8_t x = tft.readcommand8(ILI9341_RDPIXFMT);
-  // Serial.print("Pixel Format: 0x"); Serial.println(x, HEX);
 }
 
 void updateDisplay(int co2, bool co2Valid, float temperature, float humidity,
                    float pressureMmHg) {
   char text[16];
-  std::snprintf(text, sizeof(text), "%d", co2);
+#if defined(ARDUINO_ARCH_AVR)
+  itoa(co2, text, 10);
+#else
+  snprintf(text, sizeof(text), "%d", co2);
+#endif
   drawDisplayValue(co2Field, co2Valid ? text : "--", co2Color);
 
   formatDisplayValue(text, temperature, 1);
