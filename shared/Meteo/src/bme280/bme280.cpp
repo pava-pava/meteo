@@ -1,4 +1,4 @@
-#include "../config.h"
+#include <config.h>
 
 #if METEO_ENABLE_BME280
 #include "bme280.h"
@@ -6,11 +6,11 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <bosch/bme280.h>
-#include <cmath>
+#include <math.h>
 
 namespace bme280 {
 namespace {
-constexpr uint8_t address = BME280_I2C_ADDR_PRIM;
+constexpr uint8_t address = METEO_BME280_I2C_ADDRESS;
 constexpr uint32_t retryIntervalMs = 6000;
 constexpr double pascalToMmHg = 0.00750062;
 constexpr Reading unavailable{NAN, NAN, NAN};
@@ -19,11 +19,14 @@ bool ready = false;
 uint32_t lastAttempt = 0;
 
 int8_t readRegisters(uint8_t reg, uint8_t* data, uint32_t length, void*) {
+  if (length > UINT8_MAX) {
+    return -1;
+  }
   Wire.beginTransmission(address);
   Wire.write(reg);
   // Читаем с повторным START после указателя регистра. Неполный ответ считаем ошибкой I²C.
   if (Wire.endTransmission(false) != 0 ||
-      Wire.requestFrom(address, static_cast<size_t>(length), true) != length) {
+      Wire.requestFrom(address, static_cast<uint8_t>(length), uint8_t{1}) != length) {
     return -1;
   }
   for (uint32_t index = 0; index < length; ++index) {
@@ -74,7 +77,14 @@ bool startSensor() {
 }  // namespace
 
 void begin() {
-  Wire.begin(D3, D4);  // SDA, SCL NodeMCU
+#if defined(ARDUINO_ARCH_AVR)
+  static_assert(METEO_BME280_SDA_PIN == SDA && METEO_BME280_SCL_PIN == SCL,
+                "Use the hardware I2C pins on AVR");
+  Wire.begin();
+  Wire.setWireTimeout(25000, true);
+#else
+  Wire.begin(METEO_BME280_SDA_PIN, METEO_BME280_SCL_PIN);
+#endif
   sensor.intf = BME280_I2C_INTF;
   sensor.read = readRegisters;
   sensor.write = writeRegisters;
